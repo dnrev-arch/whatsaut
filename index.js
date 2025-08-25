@@ -17,9 +17,9 @@ let checkpointHistory = []; // Histórico de todos os checkpoints
 let instanceStats = new Map(); // Estatísticas por instância
 let instanceCounter = 0;
 
-// Instâncias disponíveis
+// Instâncias disponíveis - ID é a própria API Key (igual ao projeto anterior)
 const INSTANCES = [
-    { name: 'G01', id: '584F8ACCAA48-488D-A26E-E75E1A5B2994' },
+    { name: 'G01', id: '584F8ACCAA48-488D-A26E-E75E1A5B2994' }, // id = apikey
     { name: 'G02', id: '2E2C41AB88F9-4356-B866-9ADA88530FD0' },
     { name: 'G03', id: '9AFECAC9683B-4611-8C51-933447B70905' },
     { name: 'G04', id: 'C974682BB258-4756-98F0-CF6D90FC2755' },
@@ -287,6 +287,7 @@ app.post('/api/start-conversation', async (req, res) => {
             status: 'created',
             client_phone: client_phone,
             instance: instanceName,
+            instance_apikey: getInstanceApiKey(instanceName), // Envia API Key junto
             conversation_id: `conv_${Date.now()}`
         });
         
@@ -375,6 +376,8 @@ app.post('/webhook/evolution', async (req, res) => {
                     checkpoint_id: result.checkpoint_passed,
                     response_message: result.response,
                     total_checkpoints_passed: result.total_passed,
+                    instance: state.instance,
+                    instance_apikey: getInstanceApiKey(state.instance), // Adiciona API Key
                     timestamp: new Date().toISOString(),
                     brazil_time: getBrazilTime()
                 };
