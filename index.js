@@ -9,17 +9,17 @@ const CHECKPOINT_TIMEOUT = 24 * 60 * 60 * 1000; // 24 horas para responder
 const DATA_RETENTION_TIME = 48 * 60 * 60 * 1000; // 48 horas retenção total
 const CLEANUP_INTERVAL = 30 * 60 * 1000; // 30 minutos cleanup
 
-// Armazenamento em memória (depois migraremos para banco)
-let conversationState = new Map(); // { phone: { checkpoints, current_step, etc } }
-let clientInstanceMap = new Map(); // { phone: instance }
+// Armazenamento em memória
+let conversationState = new Map();
+let clientInstanceMap = new Map();
 let systemLogs = [];
-let checkpointHistory = []; // Histórico de todos os checkpoints
-let instanceStats = new Map(); // Estatísticas por instância
+let checkpointHistory = [];
+let instanceStats = new Map();
 let instanceCounter = 0;
 
-// Instâncias disponíveis - ID é a própria API Key (igual ao projeto anterior)
+// Instâncias disponíveis - ID é a própria API Key
 const INSTANCES = [
-    { name: 'G01', id: '584F8ACCAA48-488D-A26E-E75E1A5B2994' }, // id = apikey
+    { name: 'G01', id: '584F8ACCAA48-488D-A26E-E75E1A5B2994' },
     { name: 'G02', id: '2E2C41AB88F9-4356-B866-9ADA88530FD0' },
     { name: 'G03', id: '9AFECAC9683B-4611-8C51-933447B70905' },
     { name: 'G04', id: 'C974682BB258-4756-98F0-CF6D90FC2755' },
@@ -54,21 +54,28 @@ function addLog(type, message, data = null) {
     console.log(`[${logEntry.brazilTime}] ${type.toUpperCase()}: ${message}`);
 }
 
-// ========== SISTEMA DE ROTAÇÃO INTELIGENTE DE INSTÂNCIAS ==========
+// Função para obter API Key da instância
+function getInstanceApiKey(instanceName) {
+    const instance = INSTANCES.find(i => i.name === instanceName);
+    return instance ? instance.id : null;
+}
+
+// Inicializar estatísticas das instâncias
 function initializeInstanceStats() {
     INSTANCES.forEach(instance => {
         instanceStats.set(instance.name, {
             total_leads: 0,
             active_conversations: 0,
             completed_conversations: 0,
-            response_rate: 100, // Começa com 100%
+            response_rate: 100,
             last_activity: new Date(),
-            health_score: 100, // Score de saúde (0-100)
+            health_score: 100,
             blocked: false
         });
     });
 }
 
+// Atualizar estatísticas da instância
 function updateInstanceStats(instanceName, action, data = {}) {
     const stats = instanceStats.get(instanceName);
     if (!stats) return;
@@ -80,13 +87,10 @@ function updateInstanceStats(instanceName, action, data = {}) {
             stats.last_activity = new Date();
             break;
         case 'response_received':
-            // Melhora response_rate
-            const currentRate = stats.response_rate;
-            stats.response_rate = Math.min(100, currentRate + 0.5);
+            stats.response_rate = Math.min(100, stats.response_rate + 0.5);
             stats.health_score = Math.min(100, stats.health_score + 1);
             break;
         case 'no_response':
-            // Piora response_rate
             stats.response_rate = Math.max(0, stats.response_rate - 2);
             stats.health_score = Math.max(0, stats.health_score - 5);
             break;
@@ -103,18 +107,18 @@ function updateInstanceStats(instanceName, action, data = {}) {
     instanceStats.set(instanceName, stats);
 }
 
+// Obter melhor instância disponível
 function getBestInstance() {
     let bestInstance = null;
     let bestScore = -1;
     
     for (const [instanceName, stats] of instanceStats.entries()) {
-        if (stats.blocked) continue; // Pula instâncias bloqueadas
+        if (stats.blocked) continue;
         
-        // Calcula score baseado em múltiplos fatores
-        const loadFactor = Math.max(0, 100 - (stats.active_conversations * 2)); // Penaliza sobrecarga
+        const loadFactor = Math.max(0, 100 - (stats.active_conversations * 2));
         const responseFactor = stats.response_rate;
         const healthFactor = stats.health_score;
-        const timeFactor = (Date.now() - stats.last_activity.getTime()) < 300000 ? 10 : 0; // Bonus se ativa recentemente
+        const timeFactor = (Date.now() - stats.last_activity.getTime()) < 300000 ? 10 : 0;
         
         const finalScore = (loadFactor * 0.4) + (responseFactor * 0.3) + (healthFactor * 0.2) + (timeFactor * 0.1);
         
@@ -124,7 +128,6 @@ function getBestInstance() {
         }
     }
     
-    // Fallback para round-robin se algo der errado
     if (!bestInstance) {
         bestInstance = INSTANCES[instanceCounter % INSTANCES.length].name;
         instanceCounter++;
@@ -133,27 +136,25 @@ function getBestInstance() {
     return bestInstance;
 }
 
-// ========== SISTEMA DE MÚLTIPLOS CHECKPOINTS ==========
-
-// Estrutura de um estado de conversa com checkpoints
+// Criar estado da conversa
 function createConversationState(clientPhone, clientName, instanceName) {
     return {
         client_phone: clientPhone,
         client_name: clientName,
         instance: instanceName,
-        current_checkpoint: null, // Qual checkpoint está aguardando
-        checkpoint_history: [], // Histórico de checkpoints passados
-        responses: [], // Respostas do cliente
+        current_checkpoint: null,
+        checkpoint_history: [],
+        responses: [],
         created_at: new Date(),
         last_activity: new Date(),
         expires_at: new Date(Date.now() + CHECKPOINT_TIMEOUT),
-        status: 'active', // active, completed, expired, blocked
+        status: 'active',
         total_checkpoints_passed: 0,
         waiting_for_response: false
     };
 }
 
-// Ativar um checkpoint específico
+// Ativar checkpoint
 function activateCheckpoint(clientPhone, checkpointId, data = {}) {
     const state = conversationState.get(clientPhone);
     if (!state) {
@@ -161,13 +162,11 @@ function activateCheckpoint(clientPhone, checkpointId, data = {}) {
         return { success: false, error: 'Cliente não encontrado' };
     }
     
-    // Atualiza estado
     state.current_checkpoint = checkpointId;
     state.waiting_for_response = true;
     state.last_activity = new Date();
-    state.expires_at = new Date(Date.now() + CHECKPOINT_TIMEOUT); // Reset timer
+    state.expires_at = new Date(Date.now() + CHECKPOINT_TIMEOUT);
     
-    // Adiciona dados extras se fornecidos
     if (data.message) state.last_system_message = data.message;
     if (data.step_data) state.step_data = data.step_data;
     
@@ -178,7 +177,7 @@ function activateCheckpoint(clientPhone, checkpointId, data = {}) {
     return { success: true, checkpoint: checkpointId, client: clientPhone };
 }
 
-// Processar resposta do cliente (passa pelo checkpoint)
+// Processar resposta do cliente
 function processClientResponse(clientPhone, responseMessage) {
     const state = conversationState.get(clientPhone);
     if (!state) {
@@ -191,7 +190,6 @@ function processClientResponse(clientPhone, responseMessage) {
         return { success: false, error: 'Não estava aguardando resposta' };
     }
     
-    // Registra a resposta
     const response = {
         checkpoint_id: state.current_checkpoint,
         message: responseMessage,
@@ -206,20 +204,17 @@ function processClientResponse(clientPhone, responseMessage) {
         response_message: responseMessage
     });
     
-    // Atualiza contadores
     state.total_checkpoints_passed++;
     state.waiting_for_response = false;
     state.last_activity = new Date();
     
     const passedCheckpoint = state.current_checkpoint;
-    state.current_checkpoint = null; // Limpa checkpoint atual
+    state.current_checkpoint = null;
     
-    // Atualiza estatísticas da instância
     updateInstanceStats(state.instance, 'response_received');
     
     conversationState.set(clientPhone, state);
     
-    // Adiciona ao histórico global
     checkpointHistory.unshift({
         id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
         client_phone: clientPhone,
@@ -243,9 +238,7 @@ function processClientResponse(clientPhone, responseMessage) {
     };
 }
 
-// ========== API ENDPOINTS PARA N8N ==========
-
-// 1. INICIAR NOVA CONVERSA (Vem do redirecionador)
+// API para iniciar conversa
 app.post('/api/start-conversation', async (req, res) => {
     try {
         const { client_phone, client_name, source = 'ads' } = req.body;
@@ -254,7 +247,6 @@ app.post('/api/start-conversation', async (req, res) => {
             return res.status(400).json({ success: false, error: 'client_phone obrigatório' });
         }
         
-        // Verifica se já existe conversa ativa
         if (conversationState.has(client_phone)) {
             const existing = conversationState.get(client_phone);
             addLog('info', `Cliente ${client_phone} já tem conversa ativa desde ${existing.created_at}`);
@@ -262,19 +254,17 @@ app.post('/api/start-conversation', async (req, res) => {
                 success: true, 
                 status: 'existing',
                 instance: existing.instance,
+                instance_apikey: getInstanceApiKey(existing.instance),
                 current_checkpoint: existing.current_checkpoint
             });
         }
         
-        // Seleciona melhor instância
         const instanceName = getBestInstance();
         updateInstanceStats(instanceName, 'new_lead');
         
-        // Cria estado da conversa
         const state = createConversationState(client_phone, client_name || 'Cliente', instanceName);
         conversationState.set(client_phone, state);
         
-        // Salva mapeamento instância
         clientInstanceMap.set(client_phone, {
             instance: instanceName,
             created_at: new Date()
@@ -287,7 +277,7 @@ app.post('/api/start-conversation', async (req, res) => {
             status: 'created',
             client_phone: client_phone,
             instance: instanceName,
-            instance_apikey: getInstanceApiKey(instanceName), // Envia API Key junto
+            instance_apikey: getInstanceApiKey(instanceName),
             conversation_id: `conv_${Date.now()}`
         });
         
@@ -297,7 +287,7 @@ app.post('/api/start-conversation', async (req, res) => {
     }
 });
 
-// 2. ATIVAR CHECKPOINT (N8N chama antes de enviar mensagem)
+// API para ativar checkpoint
 app.post('/api/activate-checkpoint', async (req, res) => {
     try {
         const { client_phone, checkpoint_id, message, step_data } = req.body;
@@ -319,7 +309,7 @@ app.post('/api/activate-checkpoint', async (req, res) => {
     }
 });
 
-// 3. VERIFICAR STATUS DO CHECKPOINT
+// API para verificar status do checkpoint
 app.get('/api/checkpoint-status/:client_phone', (req, res) => {
     try {
         const { client_phone } = req.params;
@@ -338,6 +328,7 @@ app.get('/api/checkpoint-status/:client_phone', (req, res) => {
             last_activity: state.last_activity,
             expires_at: state.expires_at,
             instance: state.instance,
+            instance_apikey: getInstanceApiKey(state.instance),
             status: state.status
         });
         
@@ -346,7 +337,7 @@ app.get('/api/checkpoint-status/:client_phone', (req, res) => {
     }
 });
 
-// ========== WEBHOOK EVOLUTION (RECEBE RESPOSTAS) ==========
+// Webhook Evolution
 app.post('/webhook/evolution', async (req, res) => {
     try {
         const data = req.body;
@@ -363,13 +354,11 @@ app.post('/webhook/evolution', async (req, res) => {
         
         addLog('evolution_webhook', `Evolution: ${clientNumber} | FromMe: ${fromMe} | Conteúdo: "${messageContent.substring(0, 30)}..."`);
         
-        // Só processa se NÃO for mensagem nossa
         if (!fromMe && messageContent.trim()) {
-            // Tenta processar resposta do cliente
             const result = processClientResponse(clientNumber, messageContent);
             
             if (result.success) {
-                // ENVIA PARA N8N que cliente passou pelo checkpoint
+                const state = conversationState.get(clientNumber);
                 const eventData = {
                     event_type: 'checkpoint_passed',
                     client_phone: clientNumber,
@@ -377,12 +366,11 @@ app.post('/webhook/evolution', async (req, res) => {
                     response_message: result.response,
                     total_checkpoints_passed: result.total_passed,
                     instance: state.instance,
-                    instance_apikey: getInstanceApiKey(state.instance), // Adiciona API Key
+                    instance_apikey: getInstanceApiKey(state.instance),
                     timestamp: new Date().toISOString(),
                     brazil_time: getBrazilTime()
                 };
                 
-                // Envia para N8N (async, não bloqueia resposta)
                 sendToN8N(eventData, 'checkpoint_passed').catch(err => {
                     addLog('error', `Erro ao enviar checkpoint_passed para N8N: ${err.message}`);
                 });
@@ -427,19 +415,17 @@ async function sendToN8N(eventData, eventType) {
     }
 }
 
-// ========== JOB DE LIMPEZA (TIMEOUT DOS CHECKPOINTS) ==========
+// Limpeza de checkpoints expirados
 function cleanupExpiredCheckpoints() {
     const now = new Date();
     let expiredCount = 0;
     
     for (const [phone, state] of conversationState.entries()) {
         if (now > state.expires_at && state.waiting_for_response) {
-            // Checkpoint expirado
             state.status = 'expired';
             state.waiting_for_response = false;
             state.current_checkpoint = null;
             
-            // Atualiza estatísticas da instância
             updateInstanceStats(state.instance, 'no_response');
             updateInstanceStats(state.instance, 'conversation_complete');
             
@@ -447,14 +433,12 @@ function cleanupExpiredCheckpoints() {
             expiredCount++;
         }
         
-        // Remove conversas muito antigas (48h)
         if (now - state.created_at > DATA_RETENTION_TIME) {
             conversationState.delete(phone);
             clientInstanceMap.delete(phone);
         }
     }
     
-    // Limpa histórico antigo
     const cutoffTime = now.getTime() - DATA_RETENTION_TIME;
     checkpointHistory = checkpointHistory.filter(h => h.timestamp.getTime() > cutoffTime);
     systemLogs = systemLogs.filter(log => new Date(log.timestamp).getTime() > cutoffTime);
@@ -464,12 +448,9 @@ function cleanupExpiredCheckpoints() {
     }
 }
 
-// Executa limpeza a cada 30 minutos
 setInterval(cleanupExpiredCheckpoints, CLEANUP_INTERVAL);
 
-// ========== DASHBOARD E ESTATÍSTICAS ==========
-
-// Status principal com métricas de checkpoint
+// Status do sistema
 app.get('/status', (req, res) => {
     const conversationList = Array.from(conversationState.entries()).map(([phone, state]) => ({
         phone: phone,
@@ -484,14 +465,12 @@ app.get('/status', (req, res) => {
         expires_at: state.expires_at
     }));
     
-    // Estatísticas por instância
     const instanceStatsArray = Array.from(instanceStats.entries()).map(([name, stats]) => ({
         instance: name,
         ...stats,
         active_conversations: conversationList.filter(c => c.instance === name && c.status === 'active').length
     }));
     
-    // Estatísticas de checkpoints
     const checkpointStats = {
         total_conversations_active: conversationList.filter(c => c.status === 'active').length,
         waiting_for_response: conversationList.filter(c => c.waiting_for_response).length,
@@ -521,28 +500,7 @@ app.get('/status', (req, res) => {
     });
 });
 
-// Histórico de checkpoints
-app.get('/api/checkpoints', (req, res) => {
-    const { limit = 100, instance, checkpoint_id } = req.query;
-    
-    let filtered = checkpointHistory;
-    
-    if (instance) {
-        filtered = filtered.filter(h => h.instance === instance);
-    }
-    
-    if (checkpoint_id) {
-        filtered = filtered.filter(h => h.checkpoint_id === checkpoint_id);
-    }
-    
-    res.json({
-        total: filtered.length,
-        checkpoints: filtered.slice(0, parseInt(limit)),
-        brazil_time: getBrazilTime()
-    });
-});
-
-// Dashboard HTML (versão expandida será criada depois)
+// Dashboard HTML
 app.get('/', (req, res) => {
     res.send(`
     <!DOCTYPE html>
@@ -559,7 +517,6 @@ app.get('/', (req, res) => {
             <li>POST /api/start-conversation - Iniciar nova conversa</li>
             <li>POST /api/activate-checkpoint - Ativar checkpoint</li>
             <li>GET /api/checkpoint-status/:phone - Status do cliente</li>
-            <li>GET /api/checkpoints - Histórico de checkpoints</li>
             <li>GET /status - Status completo do sistema</li>
         </ul>
         
@@ -581,7 +538,6 @@ app.get('/', (req, res) => {
     `);
 });
 
-// Inicializa estatísticas das instâncias
 initializeInstanceStats();
 
 const PORT = process.env.PORT || 3000;
