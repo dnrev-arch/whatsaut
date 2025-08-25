@@ -1,0 +1,39 @@
+{
+  "name": "cerebro-multi-checkpoint",
+  "version": "1.0.0",
+  "description": "Sistema de múltiplos checkpoints para WhatsApp via Evolution API",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "whatsapp",
+    "evolution-api",
+    "n8n",
+    "checkpoint",
+    "webhook",
+    "automation"
+  ],
+  "author": "Seu Nome",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/seu-usuario/cerebro-multi-checkpoint.git"
+  },
+  "bugs": {
+    "url": "https://github.com/seu-usuario/cerebro-multi-checkpoint/issues"
+  },
+  "homepage": "https://github.com/seu-usuario/cerebro-multi-checkpoint#readme"
+}
