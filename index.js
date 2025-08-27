@@ -19,16 +19,7 @@ const INSTANCE_ROTATION_RESET = 1000; // Reset contador a cada 1000 leads
 // INSTÂNCIAS WHATSAPP DISPONÍVEIS
 // ============================================
 const INSTANCES = [
-    { name: 'G01', id: '584F8ACCAA48-488D-A26E-E75E1A5B2994', active: true },
-    { name: 'G02', id: '2E2C41AB88F9-4356-B866-9ADA88530FD0', active: true },
-    { name: 'G03', id: '9AFECAC9683B-4611-8C51-933447B70905', active: true },
-    { name: 'G04', id: 'C974682BB258-4756-98F0-CF6D90FC2755', active: true },
-    { name: 'G05', id: '118E0162F12C-4841-ADD6-33E11DDB341A', active: true },
-    { name: 'G06', id: '4AC271E7BBEA-4A2B-BB2D-3583BDE4AE1E', active: true },
-    { name: 'G07T', id: 'E28170C3375C-4116-8723-144CC9B90994', active: true },
-    { name: 'G09', id: 'E667206D3C72-4F8B-AD10-F933F273A39B', active: true },
-    { name: 'G10', id: 'D6932E02E658-40BD-9784-8932841CCFA4', active: true },
-    { name: 'G11', id: 'A1A28E54D712-41B9-A682-A49072EA2C0B', active: true },
+    { name: 'G08', id: 'A63C380B277D-4A5E-9ECD-48710291E5A6', active: true },
 ];
 
 // ============================================
