@@ -483,10 +483,40 @@ app.post('/webhook/evolution', async (req, res) => {
             return res.status(200).json({ success: true });
         }
         
+        // Ignora mensagens vazias
+        if (!messageContent.trim()) {
+            return res.status(200).json({ success: true });
+        }
+        
         // Log da mensagem recebida
         addLog('evolution', `Mensagem de ${phone}: "${messageContent.substring(0, 50)}..."`);
         
-        // Processa resposta se houver conversa ativa
+        // NOVA LÓGICA: Verifica se é lead novo (número desconhecido)
+        if (!conversationState.has(phone)) {
+            // CRIA LEAD AUTOMATICAMENTE
+            const conversation = createConversation(phone, 'Cliente', 'whatsapp_direto');
+            
+            addLog('auto_lead', `Lead criado automaticamente: ${phone}`, {
+                phone: phone,
+                initial_message: messageContent,
+                instance: conversation.instance
+            });
+            
+            // Notifica N8N como new_lead para iniciar o fluxo
+            await notifyN8N({
+                event: 'new_lead',
+                phone: phone,
+                name: 'Cliente',
+                instance: conversation.instance,
+                instance_id: conversation.instance_id,
+                initial_message: messageContent,
+                source: 'whatsapp_direto'
+            });
+            
+            return res.status(200).json({ success: true, status: 'new_lead_created' });
+        }
+        
+        // LÓGICA EXISTENTE: Processa resposta de checkpoint se houver conversa ativa
         const result = processCheckpointResponse(phone, messageContent);
         
         if (result.success) {
@@ -931,7 +961,7 @@ function getHTMLDashboard() {
                 <i class="fab fa-whatsapp"></i>
                 Sistema Multi-Checkpoint WhatsApp
             </h1>
-            <div class="subtitle">Gerenciamento inteligente de conversas com múltiplos pontos de parada</div>
+            <div class="subtitle">Gerenciamento inteligente de conversas com múltiplos pontos de parada - AUTO LEAD</div>
             
             <div class="config-info">
                 <div class="config-row">
@@ -949,6 +979,10 @@ function getHTMLDashboard() {
                 <div class="config-row">
                     <span><strong>Status:</strong></span>
                     <span class="badge badge-success">Online</span>
+                </div>
+                <div class="config-row">
+                    <span><strong>Modo:</strong></span>
+                    <span class="badge badge-info">Auto Lead</span>
                 </div>
                 <div class="config-row">
                     <span><strong>Horário:</strong></span>
@@ -1071,7 +1105,7 @@ function getHTMLDashboard() {
             const content = document.getElementById('tab-content');
             
             if (!systemData.conversations || systemData.conversations.length === 0) {
-                content.innerHTML = '<div class="empty-state"><i class="fas fa-comments"></i><h3>Nenhuma conversa ativa</h3><p>As conversas aparecerão aqui quando iniciadas</p></div>';
+                content.innerHTML = '<div class="empty-state"><i class="fas fa-comments"></i><h3>Nenhuma conversa ativa</h3><p>As conversas aparecerão aqui quando iniciadas automaticamente</p></div>';
                 return;
             }
             
@@ -1270,12 +1304,14 @@ app.listen(PORT, () => {
     console.log(`🔄 Limpeza automática: a cada ${CLEANUP_INTERVAL / 60000} minutos`);
     console.log(`💾 Retenção de dados: ${DATA_RETENTION_TIME / 3600000} horas`);
     console.log(`⏱️ Timeout checkpoint: ${CHECKPOINT_TIMEOUT / 3600000} horas`);
-    console.log('\n✨ Sistema pronto para receber leads!');
+    console.log('\n🚀 MODO AUTO LEAD ATIVADO!');
+    console.log('📱 Qualquer mensagem = Lead automático');
     console.log('=====================================\n');
     
-    addLog('system', 'Sistema iniciado com sucesso', {
+    addLog('system', 'Sistema iniciado com AUTO LEAD ativado', {
         port: PORT,
         instances: INSTANCES.length,
-        n8n_webhook: N8N_WEBHOOK_URL
+        n8n_webhook: N8N_WEBHOOK_URL,
+        mode: 'auto_lead'
     });
 });
